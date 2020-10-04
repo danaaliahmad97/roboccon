@@ -3,28 +3,42 @@ package com.roboccon.USHER.activity;
 import android.content.Intent;
 import android.media.MediaPlayer;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 
-import android.view.Menu;
-import android.view.MenuItem;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.DisplayMetrics;
 import android.view.View;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 import android.widget.VideoView;
+
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.HashMap;
+
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.conn.ssl.SSLContexts;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 
 import com.roboccon.USHER.R;
 
-import java.io.IOException;
+import javax.net.ssl.SSLContext;
 
 public class MainActivity extends AppCompatActivity {
 
     VideoView videoView;
-    TextView description;
     ImageView language;
+    HashMap<Integer, String> utteranceHashMap = new HashMap<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -34,11 +48,14 @@ public class MainActivity extends AppCompatActivity {
         videoView = (VideoView) findViewById(R.id.video_view);
         language = findViewById(R.id.language);
 
+        DisplayMetrics metrics = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(metrics);
+
+
         //Video Loop
         videoView.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             public void onCompletion(MediaPlayer mp) {
-                videoView.start(); //need to make transition seamless.
-//                goToGreetingPage();
+                videoView.start();
             }
         });
 
@@ -62,6 +79,68 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    public void httpRequest(String utterance) {
+        final HttpClient httpclient;
+        final String[] entityString = {""};
+        SSLContext sslContext = SSLContexts.createSystemDefault();
+        SSLConnectionSocketFactory sslsf = new SSLConnectionSocketFactory(sslContext);
+        httpclient = HttpClients.custom()
+                .setDefaultCredentialsProvider(null)
+                .setSSLSocketFactory(sslsf)
+                .build();
+        try {
+            String AppId = "59d4b94b-89dd-4f5c-9909-b5303548b912";
+            String Key = "fd34cf08f6f545ca94aebcec04ba5919";
+            String Endpoint = "https://usher.cognitiveservices.azure.com/";
+            String Utterance = utterance;
+            URIBuilder endpointURLbuilder = new URIBuilder(Endpoint + "luis/prediction/v3.0/apps/" + AppId + "/slots/production/predict?");
+            endpointURLbuilder.setParameter("query", Utterance);
+            endpointURLbuilder.setParameter("subscription-key", Key);
+            endpointURLbuilder.setParameter("show-all-intents", "false");
+            endpointURLbuilder.setParameter("verbose", "true");
+            URI endpointURL = endpointURLbuilder.build();
+            final HttpGet request = new HttpGet(endpointURL);
+            new AsyncTask<Void, Void, Void>() {
+                @Override
+                protected void onPreExecute() {
+                    super.onPreExecute();
+                }
+
+                @Override
+                protected Void doInBackground(Void... voids) {
+                    HttpResponse response = null;
+                    try {
+                        response = httpclient.execute(request);
+                    } catch (IOException e) {
+                        System.out.println("error : " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                    // Get the response.
+                    HttpEntity entity = response.getEntity();
+                    if (entity != null) {
+                        try {
+                            entityString[0] = EntityUtils.toString(entity);
+                            System.out.println(entityString[0]);
+                            goToGreetingPage();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                    return null;
+                }
+
+                @Override
+                protected void onPostExecute(Void aVoid) {
+                    super.onPostExecute(aVoid);
+                }
+            }.execute();
+        }
+        // Display errors if they occur.
+        catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
     public void goToGreetingPage() {
         Intent intent = new Intent(this, GreetingsActivity.class);
         startActivity(intent);
@@ -75,27 +154,20 @@ public class MainActivity extends AppCompatActivity {
         videoView.setVideoURI(uri);
         videoView.requestFocus();
         videoView.start();
+        generateRequest();
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
+    public void generateRequest() {
+        Handler handler = new Handler(Looper.getMainLooper());
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                //mock user greetings
+                httpRequest("hello");
+            }
+        };
+        handler.postDelayed(r, 9000);
+
     }
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
-        }
-
-        return super.onOptionsItemSelected(item);
-    }
 }
